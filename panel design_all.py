@@ -18,6 +18,18 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+import base64
+import hashlib
+
+def bytes_size_and_sha1(b: bytes) -> str:
+    return f"{len(b)} bytes | sha1={hashlib.sha1(b).hexdigest()[:10]}"
+
+def make_base64_xlsx_link(b: bytes, filename: str) -> str:
+    b64 = base64.b64encode(b).decode()
+    mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    return f'<a download="{filename}" href="data:{mime};base64,{b64}">⬇ Download via fallback link</a>'
+
+
 # ---------------- Assumptions / Config ----------------
 ASSUMPTIONS = {
     # Spares & capacities
@@ -564,3 +576,4 @@ if __name__ == "__main__":
             bootstrap.run(os.path.abspath(__file__), "", [], {})
 else:
     main()
+
