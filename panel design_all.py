@@ -509,7 +509,7 @@ def main():
         total_btu = c13.number_input("BTU", value=2, min_value=0, step=1)
         total_iaq = c14.number_input("IAQ", value=8, min_value=0, step=1)
 
-        if st.button("Generate from Totals (Option C)"):
+    if st.button("Generate from Totals (Option C)"):
     try:
         # ... your existing totals/panels/prev_df code ...
 
@@ -542,7 +542,7 @@ if "xlsx_bytes_C" in st.session_state:
             st.session_state.get("xlsx_name_C", "Panel_BQ.xlsx")
         ),
         unsafe_allow_html=True
-    )
+    )    
 
 # --------------- Auto-launch Streamlit when run directly ---------------
 if __name__ == "__main__":
@@ -563,5 +563,6 @@ if __name__ == "__main__":
             bootstrap.run(os.path.abspath(__file__), "", [], {})
 else:
     main()
+
 
 
