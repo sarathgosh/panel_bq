@@ -5,7 +5,7 @@
 # - Option C: Totals -> auto-generate panels (with tail-merge to avoid 1-point panels)
 # - 25% spare, DIN capacity check, PSU estimate, glands, enclosure suggestion
 # - High-level devices: DPM, VAV, BTU, IAQ
-# - Excel export (Panel_BQ, etc.)
+# - Excel export (Panel_BQ, etc.) with reliable downloads via session_state
 
 import io
 import re
@@ -407,6 +407,7 @@ def main():
 
     st.divider()
 
+    # -------- Option A
     if mode == "Option A — Manual rows":
         st.subheader("Option A — Enter per-panel rows")
         st.caption("Edit the table below. Add/remove rows as needed.")
@@ -419,15 +420,24 @@ def main():
         df_edit = st.data_editor(sample, num_rows="dynamic", width="stretch")
         if st.button("Generate BQ (Option A)"):
             out = build_workbook(df_edit)
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            st.download_button("⬇ Download Excel", data=out.getvalue(),
-                               file_name=f"Panel_BQ_{ts}.xlsx",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            out.seek(0)
+            st.session_state["xlsx_bytes_A"] = out.getvalue()
+            st.session_state["xlsx_name_A"] = f"Panel_BQ_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
+            st.success("Workbook generated. Use the Download button below.")
 
+        if "xlsx_bytes_A" in st.session_state:
+            st.download_button("⬇ Download Excel",
+                               data=st.session_state["xlsx_bytes_A"],
+                               file_name=st.session_state.get("xlsx_name_A","Panel_BQ.xlsx"),
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               key="dl_optA")
+
+    # -------- Option B
     elif mode == "Option B — Upload Excel":
         st.subheader("Option B — Upload Excel")
         st.caption("Upload a workbook with sheet **Input** (or first sheet) containing required columns.")
         f = st.file_uploader("Choose .xlsx/.xls", type=["xlsx","xls"])
+
         if st.button("Generate BQ (Option B)"):
             if not f:
                 st.error("Please upload an Excel file.")
@@ -439,14 +449,23 @@ def main():
                         f.seek(0)
                         df_in = pd.read_excel(f)
                     out = build_workbook(df_in)
-                    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    st.download_button("⬇ Download Excel", data=out.getvalue(),
-                                       file_name=f"Panel_BQ_{ts}.xlsx",
-                                       mime="application/vnd.openxmlformats-officedocument.spreads heetml.sheet")
-                    st.success("Workbook generated.")
+                    out.seek(0)
+                    st.session_state["xlsx_bytes_B"] = out.getvalue()  # persist bytes
+                    st.session_state["xlsx_name_B"] = f"Panel_BQ_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
+                    st.success("Workbook generated. Use the Download button below.")
                 except Exception as e:
                     st.exception(e)
 
+        if "xlsx_bytes_B" in st.session_state:
+            st.download_button(
+                "⬇ Download Excel",
+                data=st.session_state["xlsx_bytes_B"],
+                file_name=st.session_state.get("xlsx_name_B", "Panel_BQ.xlsx"),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_optB",
+            )
+
+    # -------- Option C
     else:
         st.subheader("Option C — Totals → Auto-generate panels")
         with st.expander("Column descriptions", expanded=False):
@@ -479,53 +498,52 @@ def main():
         total_iaq = c14.number_input("IAQ", value=8, min_value=0, step=1)
 
         if st.button("Generate from Totals (Option C)"):
-    try:
-        totals = {
-            "DI": int(total_di), "DO": int(total_do), "AI": int(total_ai), "AO": int(total_ao),
-            "Modbus": int(total_mb), "DPM": int(total_dpm), "VAV": int(total_vav),
-            "BTU": int(total_btu), "IAQ": int(total_iaq),
-        }
-        panels = autosplit_panels(project, prefix, totals, (width, height, depth))
+            try:
+                totals = {
+                    "DI": int(total_di), "DO": int(total_do), "AI": int(total_ai), "AO": int(total_ao),
+                    "Modbus": int(total_mb), "DPM": int(total_dpm), "VAV": int(total_vav),
+                    "BTU": int(total_btu), "IAQ": int(total_iaq),
+                }
+                panels = autosplit_panels(project, prefix, totals, (width, height, depth))
 
-        # Preview allocation table
-        prev_df = pd.DataFrame([{
-            "Project_Name": p["Project_Name"],
-            "Panel_ID": p["Panel_ID"],
-            "DI_Count": p["DI_Count"], "DO_Count": p["DO_Count"],
-            "AI_Count": p["AI_Count"], "AO_Count": p["AO_Count"],
-            "Modbus_Device_Count": 0,  # set below
-            "DPM_Count": p.get("DPM_Count", 0), "VAV_Count": p.get("VAV_Count", 0),
-            "BTU_Count": p.get("BTU_Count", 0), "IAQ_Count": p.get("IAQ_Count", 0),
-            "Panel_Width_mm": p["Panel_Width_mm"], "Panel_Height_mm": p["Panel_Height_mm"], "Panel_Depth_mm": p["Panel_Depth_mm"],
-        } for p in panels])
+                # Preview allocation table
+                prev_df = pd.DataFrame([{
+                    "Project_Name": p["Project_Name"],
+                    "Panel_ID": p["Panel_ID"],
+                    "DI_Count": p["DI_Count"], "DO_Count": p["DO_Count"],
+                    "AI_Count": p["AI_Count"], "AO_Count": p["AO_Count"],
+                    "Modbus_Device_Count": 0,  # set below
+                    "DPM_Count": p.get("DPM_Count", 0), "VAV_Count": p.get("VAV_Count", 0),
+                    "BTU_Count": p.get("BTU_Count", 0), "IAQ_Count": p.get("IAQ_Count", 0),
+                    "Panel_Width_mm": p["Panel_Width_mm"], "Panel_Height_mm": p["Panel_Height_mm"], "Panel_Depth_mm": p["Panel_Depth_mm"],
+                } for p in panels])
 
-        # Distribute generic Modbus per panel (evenly)
-        n = len(panels)
-        mb_base = totals["Modbus"] // n
-        mb_extra = totals["Modbus"] % n
-        prev_df["Modbus_Device_Count"] = [mb_base + (1 if i < mb_extra else 0) for i in range(n)]
+                # Distribute generic Modbus per panel (evenly)
+                n = len(panels)
+                mb_base = totals["Modbus"] // n
+                mb_extra = totals["Modbus"] % n
+                prev_df["Modbus_Device_Count"] = [mb_base + (1 if i < mb_extra else 0) for i in range(n)]
 
-        st.dataframe(prev_df, width="stretch")
+                st.dataframe(prev_df, width="stretch")
 
-        # Build workbook and persist bytes for reliable download
-        out = build_workbook(prev_df)
-        out.seek(0)
-        st.session_state["xlsx_bytes_optC"] = out.getvalue()
-        st.session_state["xlsx_name_optC"] = f"Panel_BQ_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
-        st.success("Workbook generated. Use the Download button below.")
-    except Exception as e:
-        st.exception(e)
+                # Build workbook and persist bytes for reliable download
+                out = build_workbook(prev_df)
+                out.seek(0)
+                st.session_state["xlsx_bytes_C"] = out.getvalue()
+                st.session_state["xlsx_name_C"] = f"Panel_BQ_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
+                st.success("Workbook generated. Use the Download button below.")
+            except Exception as e:
+                st.exception(e)
 
-# render the download button outside the button block to avoid rerun issues
-if "xlsx_bytes_optC" in st.session_state:
-    st.download_button(
-        "⬇ Download Excel (Option C)",
-        data=st.session_state["xlsx_bytes_optC"],
-        file_name=st.session_state.get("xlsx_name_optC", "Panel_BQ.xlsx"),
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        key="dl_optC",
-    )
-
+        # Render download button outside the button block (prevents rerun-loss)
+        if "xlsx_bytes_C" in st.session_state:
+            st.download_button(
+                "⬇ Download Excel (Option C)",
+                data=st.session_state["xlsx_bytes_C"],
+                file_name=st.session_state.get("xlsx_name_C", "Panel_BQ.xlsx"),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_optC",
+            )
 
 # --------------- Auto-launch Streamlit when run directly ---------------
 if __name__ == "__main__":
@@ -536,7 +554,7 @@ if __name__ == "__main__":
         try:
             # Newer Streamlit entrypoint
             from streamlit.web.cli import main as st_main
-            sys.argv = ["streamlit", "run", os.path.abspath(__file__)]  # you can append flags here (port, address)
+            sys.argv = ["streamlit", "run", os.path.abspath(__file__)]
             os.environ["STREAMLIT_SERVER_RUNNING"] = "1"
             sys.exit(st_main())
         except Exception:
@@ -546,4 +564,3 @@ if __name__ == "__main__":
             bootstrap.run(os.path.abspath(__file__), "", [], {})
 else:
     main()
-
