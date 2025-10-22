@@ -510,52 +510,39 @@ def main():
         total_iaq = c14.number_input("IAQ", value=8, min_value=0, step=1)
 
         if st.button("Generate from Totals (Option C)"):
-            try:
-                totals = {
-                    "DI": int(total_di), "DO": int(total_do), "AI": int(total_ai), "AO": int(total_ao),
-                    "Modbus": int(total_mb), "DPM": int(total_dpm), "VAV": int(total_vav),
-                    "BTU": int(total_btu), "IAQ": int(total_iaq),
-                }
-                panels = autosplit_panels(project, prefix, totals, (width, height, depth))
+    try:
+        # ... your existing totals/panels/prev_df code ...
 
-                # Preview allocation table
-                prev_df = pd.DataFrame([{
-                    "Project_Name": p["Project_Name"],
-                    "Panel_ID": p["Panel_ID"],
-                    "DI_Count": p["DI_Count"], "DO_Count": p["DO_Count"],
-                    "AI_Count": p["AI_Count"], "AO_Count": p["AO_Count"],
-                    "Modbus_Device_Count": 0,  # set below
-                    "DPM_Count": p.get("DPM_Count", 0), "VAV_Count": p.get("VAV_Count", 0),
-                    "BTU_Count": p.get("BTU_Count", 0), "IAQ_Count": p.get("IAQ_Count", 0),
-                    "Panel_Width_mm": p["Panel_Width_mm"], "Panel_Height_mm": p["Panel_Height_mm"], "Panel_Depth_mm": p["Panel_Depth_mm"],
-                } for p in panels])
+        out = build_workbook(prev_df)
+        out.seek(0)
+        file_bytes = out.getvalue()                           # <-- bytes now
+        st.session_state["xlsx_bytes_C"] = file_bytes
+        st.session_state["xlsx_name_C"] = f"Panel_BQ_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
 
-                # Distribute generic Modbus per panel (evenly)
-                n = len(panels)
-                mb_base = totals["Modbus"] // n
-                mb_extra = totals["Modbus"] % n
-                prev_df["Modbus_Device_Count"] = [mb_base + (1 if i < mb_extra else 0) for i in range(n)]
+        # show a tiny debug line so we know we actually have bytes
+        st.caption(f"Excel ready: {bytes_size_and_sha1(file_bytes)}")
+        st.success("Workbook generated. Use the buttons below.")
+    except Exception as e:
+        st.exception(e)
 
-                st.dataframe(prev_df, width="stretch")
+# render the download button & fallback link OUTSIDE the button branch
+if "xlsx_bytes_C" in st.session_state:
+    st.download_button(
+        "⬇ Download Excel (Option C)",
+        data=st.session_state["xlsx_bytes_C"],
+        file_name=st.session_state.get("xlsx_name_C", "Panel_BQ.xlsx"),
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="dl_optC",
+    )
 
-                # Build workbook and persist bytes for reliable download
-                out = build_workbook(prev_df)
-                out.seek(0)
-                st.session_state["xlsx_bytes_C"] = out.getvalue()
-                st.session_state["xlsx_name_C"] = f"Panel_BQ_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
-                st.success("Workbook generated. Use the Download button below.")
-            except Exception as e:
-                st.exception(e)
-
-        # Render download button outside the button block (prevents rerun-loss)
-        if "xlsx_bytes_C" in st.session_state:
-            st.download_button(
-                "⬇ Download Excel (Option C)",
-                data=st.session_state["xlsx_bytes_C"],
-                file_name=st.session_state.get("xlsx_name_C", "Panel_BQ.xlsx"),
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="dl_optC",
-            )
+    # Fallback base64 link (very reliable in Edge/Chrome/Firefox)
+    st.markdown(
+        make_base64_xlsx_link(
+            st.session_state["xlsx_bytes_C"],
+            st.session_state.get("xlsx_name_C", "Panel_BQ.xlsx")
+        ),
+        unsafe_allow_html=True
+    )
 
 # --------------- Auto-launch Streamlit when run directly ---------------
 if __name__ == "__main__":
@@ -576,4 +563,5 @@ if __name__ == "__main__":
             bootstrap.run(os.path.abspath(__file__), "", [], {})
 else:
     main()
+
 
